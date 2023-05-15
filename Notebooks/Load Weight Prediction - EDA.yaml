@@ -1,0 +1,1102 @@
+schemaVersion: 2
+meta:
+  sourceVersionId: 993b97fa-c79f-439a-b46f-3e0a819de343 # DO NOT CHANGE - Hex uses this to match up project versions when reimporting the file
+  description: This notebook provides an exploratory data analysis of incoming transaction weights at Metro's transfer stations. This analysis will inform the development of a model and mobile software application that can be used by staff to predict incoming load weights based on readily observable features of the load when scales are not available to record the weight.
+  projectId: fa95f966-0912-42ca-9c83-9e14b785420f # DO NOT CHANGE - Unique ID of the project from which this file was generated
+  title: Load Weight Prediction - EDA
+  timezone: null
+  appTheme: SYS_PREF
+  codeLanguage: PYTHON
+  status:
+    name: Production
+  categories:
+    - name: Public
+  castDecimalsDefault: true
+  logicQueryCacheTimeout: null
+  publishedQueryCacheTimeout: null
+projectAssets:
+  dataConnections: []
+  envVars: []
+  secrets: []
+sharedAssets:
+  secrets: []
+  vcsPackages: []
+  dataConnections: []
+cells:
+  - cellType: TEXT
+    cellId: 7a67e84e-04b4-48b3-871a-69a994419409 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: h2
+          children:
+            - text: Import Packages and Libraries
+  - cellType: CODE
+    cellId: 5c82e818-ace0-4b35-a775-a1af22d4998f # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: joypy package install
+    config:
+      source: "!pip install joypy"
+  - cellType: CODE
+    cellId: 1f0c4208-f1ef-49ba-926a-da18c76040a1 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: call libraries
+    config:
+      source: |-
+        import joypy
+        import pandas as pd
+        import numpy as np
+        from matplotlib import pyplot as plt
+        from matplotlib import cm
+  - cellType: TEXT
+    cellId: d9707eb5-fe70-4d16-a03f-e59d5a261009 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: h2
+          children:
+            - text: Source Data
+        - type: paragraph
+          children:
+            - text: "The dataset includes over 4 million transactions at Metro South and Metro Central transfer stations over the last decade.  Transactions with no weights (tonnage = 0) were removed from the dataset, as were those with anomalously high weights above 16 tons, which were likely miscoded.  Data is from Metro's point of sale system, Weighmaster.   "
+  - cellType: TEXT
+    cellId: e76519fa-e46a-4d55-a680-e162c68c0101 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: h2
+          children:
+            - text: Prep Dataframes
+  - cellType: SQL
+    cellId: f2488bd6-b90b-414b-9763-a8b99a4c5688 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Read in CSV and perform some basic preprocessing
+    config:
+      source: |-
+        SELECT
+        YEAR(TimeStamp) AS Yr,
+        MONTH(TimeStamp) AS Mnth,
+        DAYOFWEEK(TimeStamp) AS Dow,
+        HOUR(TimeStamp) AS Hod,
+        Station,
+        Material,
+        VehicleType,
+        TruckNumber,
+        CASE
+            WHEN TruckNumber = '0' THEN 0
+            ELSE 1
+        END AS HasTruckNum,
+        Tons
+
+        FROM
+        "source.csv"
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: df
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig: null
+  - cellType: CODE
+    cellId: 1d9f081f-38d0-44c7-9b20-309fc2157c2d # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Df sample full
+    config:
+      source: df_sample_full = df.sample(frac=.10)
+  - cellType: SQL
+    cellId: 758e3e4a-2bbd-4ac2-acfd-eef732bf48a5 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: 10% sample of vehicle loads (without truck numbers)
+    config:
+      source: |-
+        SELECT VehicleType, Tons
+        FROM df_sample_full
+        WHERE "HasTruckNum" = 0
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: df_sample_notrucks
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig: null
+  - cellType: SQL
+    cellId: d660361c-93f2-406e-99e2-20b44eae7e52 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: 10% sample of vehicle loads (with truck numbers)
+    config:
+      source: |-
+        SELECT TruckNumber, Tons
+        FROM df_sample_full
+        WHERE "HasTruckNum" = 1
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: df_sample_trucks
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig: null
+  - cellType: SQL
+    cellId: 7490f76a-656a-4494-8540-5d3065916919 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: select random sample of 23 trucks from the 10% sample
+    config:
+      source: |-
+        SELECT TruckNumber 
+        FROM df_sample_trucks 
+        GROUP BY TruckNumber
+        USING SAMPLE 23 ROWS;
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: topNtrucks
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig: null
+  - cellType: SQL
+    cellId: 1358b060-56c1-4f21-ae0f-1e9892cb514d # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: combine random trucks with 10% loads (with truck numbers)
+    config:
+      source: |-
+        SELECT
+        df_sample_trucks.TruckNumber,
+        df_sample_trucks.Tons
+
+        FROM
+        df_sample_trucks INNER JOIN topNtrucks ON df_sample_trucks.TruckNumber = topNtrucks.TruckNumber
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: df_sample_toptrucks
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig: null
+  - cellType: TEXT
+    cellId: cfadba22-5d2a-4b5f-9d71-21d63023f36a # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: h2
+          children:
+            - text: Features
+        - type: p
+          children:
+            - text: 'In order to predict the weight of an arriving load, simple characteristics of the load must be observable and recordable by transfer station staff.  A set of initial exploratory "features" in the dataset are as follows:'
+        - type: p
+          children:
+            - bold: true
+              text: "Timestamp:"
+              underline: true
+            - bold: true
+              text: " "
+            - text: Date and time of the load's arrival, which contain features such as year, month, day of week and hour of the day of arrival.
+        - type: p
+          children:
+            - bold: true
+              text: "Station:"
+              underline: true
+            - text: " Facility (Metro Central or Metro South) to which the load is arriving"
+        - type: p
+          children:
+            - bold: true
+              text: "Material:"
+              underline: true
+            - bold: true
+              text: " "
+            - text: Dominant material stream (MSW, residential or commercial organics, wood or yard debris) arriving in the load
+        - type: p
+          children:
+            - bold: true
+              text: "Vehicle:"
+              underline: true
+            - bold: true
+              text: " "
+            - text: Information about the arriving vehicle, including it's type, truck number (if known) and level of "fullness".  Level of fullness is based on the historical max payload of a specific truck (or general vehicle type, if no truck number is available) carrying a particular material type to a particular station, relative to it's currently arriving payload, expressed as a percentage.
+  - cellType: TEXT
+    cellId: 4a21a9d0-6572-4b63-a75e-01dd8215a603 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: h2
+          children:
+            - text: Distributions
+        - type: p
+          children:
+            - text: "The following section provides ridgeline plots (distribution shapes) and summary statistics for each categorical feature with respect to the weight label.  These are provided for a 10% random sample of the dataset for compute efficiency.  Since there are thousands of unique truck numbers, a random sample of 23 is selected and displayed.  "
+  - cellType: INPUT
+    cellId: bc564cf4-b42a-4b20-8235-74c45b228ee5 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Feature Selection
+    config:
+      inputType: DROPDOWN
+      name: feature_selection
+      outputType: STRING
+      options:
+        valueOptions:
+          - Yr
+          - Mnth
+          - Dow
+          - Hod
+          - Station
+          - Material
+          - VehicleType
+          - TruckNumber
+      defaultValue: Hod
+  - cellType: CODE
+    cellId: ca079d53-08e9-47f1-bca6-8dacbbf9b4e8 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: dataframe selector code
+    config:
+      source: |-
+        df_lookup_value = feature_selection
+        df_lookup = {
+            'Yr': df_sample_full, 
+            'Mnth': df_sample_full,
+            'Dow': df_sample_full,
+            'Hod': df_sample_full,
+            'Station': df_sample_full,
+            'Material': df_sample_full,
+            'VehicleType': df_sample_notrucks,
+            'TruckNumber': df_sample_toptrucks
+            }
+        df_chosen = df_lookup[df_lookup_value]
+        df_chosen.head()
+  - cellType: CODE
+    cellId: 9920a8f0-8b12-4dbd-9d6c-025d248eb8c5 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: distributions by feature
+    config:
+      source: |-
+        %matplotlib inline
+
+        fig, axes = joypy.joyplot(df_chosen, by=feature_selection, column="Tons", range_style='own', 
+                            grid="y", linewidth=1, legend=False, figsize=(12,6), 
+                            fade=True, x_range=[-1, 6], xlabels=False
+                            )
+  - cellType: CODE
+    cellId: 4811982b-3d56-44b6-90da-2438e99284d1 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: summary stats
+    config:
+      source: |-
+        # Group the data by the user-selected feature
+        groups = df_chosen.groupby(feature_selection)
+
+        # Calculate the mean, count, standard deviation and IQR of load weights
+        stats_group = groups['Tons'].agg(['mean', 'count', 'std',
+            lambda x: x.quantile(0.25), lambda x: x.quantile(0.75),
+            lambda x: x.quantile(0.05), lambda x: x.quantile(0.95)])
+
+        # Reset the index so the "Feature" column becomes a regular column in the DataFrame
+        stats_group = stats_group.reset_index()
+
+        # Rename the selected grouping to feature for graphing purposes
+        # stats_group = stats_group.rename(columns={stats_group.columns[0]: 'Feature'})
+
+        # Rename lambdas to lower and upper
+        stats_group.rename(columns={'<lambda_0>': 'lower25',
+                                    '<lambda_1>': 'upper75',
+                                    '<lambda_2>': 'lower5',
+                                    '<lambda_3>': 'upper95'}, inplace=True)
+  - cellType: TABLE_DISPLAY
+    cellId: befe29f2-86a3-445f-bb66-a643bdc51f61 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: stats display
+    config:
+      dataFrameVariableName: stats_group
+      resultVariable: table_result
+      tableDisplayConfig:
+        pageSize: 24
+        height: null
+        hideIcons: true
+        hideIndex: true
+        defaultSortColumn: null
+        defaultSortIndexColumn: null
+        defaultSortDirection: ASC
+        conditionalFormatting: null
+        filters: null
+        columnProperties:
+          - originalName: Dow
+            renameTo: null
+            size: 76
+            wrapText: null
+            displayFormat: null
+          - originalName: Feature
+            renameTo: null
+            size: 112
+            wrapText: null
+            displayFormat: null
+          - originalName: Hod
+            renameTo: null
+            size: 93
+            wrapText: null
+            displayFormat: null
+          - originalName: Mnth
+            renameTo: null
+            size: 80
+            wrapText: null
+            displayFormat: null
+          - originalName: TruckNumber
+            renameTo: null
+            size: 126
+            wrapText: null
+            displayFormat: null
+          - originalName: Vehicle
+            renameTo: null
+            size: 91
+            wrapText: null
+            displayFormat: null
+          - originalName: VehicleType
+            renameTo: null
+            size: 147
+            wrapText: null
+            displayFormat: null
+          - originalName: Yr
+            renameTo: null
+            size: 63
+            wrapText: null
+            displayFormat: null
+          - originalName: count
+            renameTo: null
+            size: 85
+            wrapText: null
+            displayFormat:
+              format: NUMBER
+              currency: USD
+              columnType: NUMBER
+              numDecimalDigits: 0
+          - originalName: lower25
+            renameTo: null
+            size: 100
+            wrapText: null
+            displayFormat:
+              format: NUMBER
+              currency: USD
+              columnType: NUMBER
+              numDecimalDigits: 2
+          - originalName: lower5
+            renameTo: null
+            size: 95
+            wrapText: null
+            displayFormat:
+              format: NUMBER
+              currency: USD
+              columnType: NUMBER
+              numDecimalDigits: 2
+          - originalName: mean
+            renameTo: null
+            size: 89
+            wrapText: null
+            displayFormat:
+              format: NUMBER
+              currency: USD
+              columnType: NUMBER
+              numDecimalDigits: 2
+          - originalName: std
+            renameTo: null
+            size: 76
+            wrapText: null
+            displayFormat:
+              format: NUMBER
+              currency: USD
+              columnType: NUMBER
+              numDecimalDigits: 2
+          - originalName: upper75
+            renameTo: null
+            size: 100
+            wrapText: null
+            displayFormat:
+              format: NUMBER
+              currency: USD
+              columnType: NUMBER
+              numDecimalDigits: 2
+          - originalName: upper95
+            renameTo: null
+            size: 101
+            wrapText: null
+            displayFormat:
+              format: NUMBER
+              currency: USD
+              columnType: NUMBER
+              numDecimalDigits: 2
+        columnOrdering: null
+  - cellType: TEXT
+    cellId: d342ffd7-e654-4da4-84a3-bcb19b2df189 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: h2
+          children:
+            - text: Truck Number Prevalence
+        - type: p
+          children:
+            - text: "Truck numbers are not available for most of the loads that come into Metro stations.  In these instances, only vehicle types are recorded.  At Metro Central, loads with truck numbers are twice as common (40% of all loads) than they are at Metro South (23% of all loads).  All incoming loads have an associated vehicle type.  "
+  - cellType: CHARTV2
+    cellId: ce4c37c8-0ba1-4af3-a9f5-4aecbdd78619 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: "Loads with truck numbers: twice as common at Central than at South"
+    config:
+      height: null
+      chartSpec:
+        type: layered
+        layers:
+          - id: d9f79c7d-5c53-455e-8eea-3f48b71c5022
+            xAxis:
+              type: string
+              style:
+                ticks: {}
+                labels: {}
+              dataFrameColumn: Station
+            series:
+              - id: 8c4e46d5-4ac3-4af1-95c5-73398a779305
+                type: bar
+                axis:
+                  type: number
+                  style:
+                    max: 1
+                    min: 0
+                    ticks:
+                      count: 0
+                    labels: {}
+                  title: Proportion of loads with Truck Numbers
+                  aggregate: average
+                  numberFormat:
+                    format: PERCENT
+                    currency: USD
+                    columnType: NUMBER
+                    numDecimalDigits: 0
+                dataFrameColumns:
+                  - HasTruckNum
+                colorOrder: []
+                color:
+                  type: static
+                  color: "#3F4257"
+                opacity:
+                  type: static
+                  value: 1
+                tooltip:
+                  type: auto
+                dataLabels:
+                  color: "#01011b"
+                  fontSize: 14
+                  position: outside-end
+                barWidth: 1
+                orientation: vertical
+                layout: grouped
+            dataFrame: df_sample_full
+        settings:
+          legend:
+            position: right
+          tooltip: true
+          selectionEnabled: false
+      chartSelection: {}
+      resultVariable: filter_result_4
+  - cellType: TEXT
+    cellId: 59974af4-d6a5-4813-b796-6a155bc858b2 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: paragraph
+          children:
+            - text: Truck number prevalence also varies significantly with material type.  For commercial and residential organics, nearly all of the loads coming into both transfer stations have truck numbers.  Not so for MSW, wood and yard debris.
+  - cellType: CHARTV2
+    cellId: 2f6cdb5f-7771-44b0-a122-feef1fb33ed8 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Proportion of loads with truck numbers, by station and material type
+    config:
+      height: null
+      chartSpec:
+        type: layered
+        layers:
+          - id: 2a906a85-552c-49d7-a8c7-2237abecc89b
+            xAxis:
+              type: string
+              style:
+                ticks: {}
+                labels: {}
+              dataFrameColumn: Material
+            series:
+              - id: 28e1eb4e-c4e3-4525-b326-7866641c293e
+                type: bar
+                axis:
+                  type: number
+                  style:
+                    ticks:
+                      count: 0
+                    labels: {}
+                  title: Proportion of loads with Truck Numbers
+                  aggregate: average
+                  numberFormat:
+                    format: PERCENT
+                    currency: USD
+                    columnType: NUMBER
+                    numDecimalDigits: 0
+                dataFrameColumns:
+                  - HasTruckNum
+                colorDataFrameColumn: Station
+                colorOrder: []
+                color:
+                  type: series
+                  colorsBySeriesValues:
+                    Metro South: "#9CA3B4"
+                    Metro Central: "#CFD3DE"
+                opacity:
+                  type: static
+                  value: 1
+                tooltip:
+                  type: auto
+                dataLabels:
+                  fontSize: 10
+                  position: inside-end
+                barWidth: 1
+                orientation: vertical
+                layout: grouped
+            dataFrame: df_sample_full
+        settings:
+          legend:
+            position: right
+          tooltip: true
+          selectionEnabled: false
+      chartSelection: {}
+      resultVariable: filter_result_2
+  - cellType: TEXT
+    cellId: 5d659bcd-3fdb-4d14-9ed0-c7d357aa0059 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: h2
+          children:
+            - text: Vehicle Fullness
+        - type: paragraph
+          children:
+            - text: "The fullness of a vehicle, that is, it's recorded load weight for a particular material type m arriving at station s RELATIVE to it's max weight for m at s across time, is engineered from existing data, and plotted below.  The scatterplot shows strong relationships between fullness and weight, as expected.  This feature will be an important one in the final model. "
+  - cellType: SQL
+    cellId: 676fd2c1-47cd-4655-892c-b9c1d608bf37 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Vehiclefullness
+    config:
+      source: |-
+        WITH 
+        VehicleCaps AS
+        (
+            SELECT 
+            Station,
+            Material,
+            CASE WHEN HasTruckNum = 1 THEN TruckNumber ELSE VehicleType END AS Vehicle,
+            MAX(Tons) AS Capacity
+
+            FROM df
+
+            GROUP BY
+            Station,
+            Material,
+            CASE WHEN HasTruckNum = 1 THEN TruckNumber ELSE VehicleType END
+        ),
+        Data AS
+        (
+            SELECT
+            Station,
+            Material,
+            CASE WHEN HasTruckNum = 1 THEN TruckNumber ELSE VehicleType END AS Vehicle,
+            HasTruckNum,
+            Tons
+
+            FROM df_sample_full
+        )
+        SELECT
+        Data.Tons,
+        VehicleCaps.Capacity,
+        Tons/Capacity AS Fullness,
+        Data.HasTruckNum,
+        Data.Station,
+        Data.Material
+
+        FROM Data INNER JOIN VehicleCaps ON
+            Data.Station = VehicleCaps.Station AND
+            Data.Material = VehicleCaps.Material AND
+            Data.Vehicle = VehicleCaps.Vehicle
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: VehicleFullness
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig: null
+  - cellType: CHARTV2
+    cellId: 59ea867b-62a6-4e3d-8382-c50353dc3e85 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      height: null
+      chartSpec:
+        type: layered
+        layers:
+          - id: bbced969-a7e8-4dd9-98e7-5c5a89beb1c0
+            xAxis:
+              type: number
+              style:
+                ticks: {}
+                labels: {}
+              title: Fullness
+              dataFrameColumn: Fullness
+            series:
+              - id: b4155cf2-60c1-4b3c-a58c-834c14ad238a
+                type: histogram
+                axis:
+                  type: number
+                  style:
+                    ticks: {}
+                    labels: {}
+                  title: Load Counts
+                dataFrameColumns: []
+                colorOrder: ascending
+                color:
+                  type: static
+                opacity:
+                  type: static
+                  value: 1
+                tooltip:
+                  type: auto
+                bin:
+                  type: count
+                  value: 100
+                format: count
+            dataFrame: VehicleFullness
+        settings:
+          legend:
+            position: right
+          tooltip: true
+          selectionEnabled: false
+      chartSelection: {}
+      resultVariable: filter_result_6
+  - cellType: CHARTV2
+    cellId: e29e351e-eea8-45b7-b527-9764e78e2a2b # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      height: null
+      chartSpec:
+        type: layered
+        layers:
+          - id: d24d03b7-c557-4bd5-90f6-cda3e079ca8c
+            xAxis:
+              type: number
+              style:
+                ticks: {}
+                labels: {}
+              title: Vehicle fullness
+              numberFormat:
+                format: PERCENT
+                currency: USD
+                columnType: NUMBER
+                numDecimalDigits: 0
+              dataFrameColumn: Fullness
+            series:
+              - id: e5a3cbc2-03c5-4e40-968b-1a84e6ccd28f
+                type: scatter
+                axis:
+                  type: number
+                  style:
+                    ticks: {}
+                    labels: {}
+                  title: Vehicle weight
+                  numberFormat:
+                    format: NUMBER
+                    currency: USD
+                    columnType: NUMBER
+                    numDecimalDigits: 2
+                dataFrameColumns:
+                  - Tons
+                colorDataFrameColumn: HasTruckNum
+                colorOrder: []
+                color:
+                  type: series
+                  colorsBySeriesValues:
+                    "0": "#FF9DA6"
+                    "1": "#BAB0AC"
+                opacity:
+                  type: static
+                  value: 1
+                tooltip:
+                  type: auto
+                filled: true
+            dataFrame: VehicleFullness
+        settings:
+          legend:
+            position: right
+          tooltip: true
+          selectionEnabled: false
+      chartSelection: {}
+      resultVariable: filter_result_5
+  - cellType: TEXT
+    cellId: de044781-9f7f-4be1-b0c7-5646472df8a0 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: h2
+          children:
+            - text: Project Objective
+        - type: p
+          children:
+            - text: "Trained, validated and tested machine learning (ML) model that can make online (one-at-a-time) weight predictions based on observable attributes of the arriving load.  For example, something like this:"
+  - cellType: INPUT
+    cellId: 1587fcd1-2505-495c-8c31-7de496aed216 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Timestamp
+    config:
+      inputType: DATE
+      name: timestamp
+      outputType: DATETIME
+      options: null
+      defaultValue:
+        timezoneName: America/Los_Angeles
+        isoDateString: 2023-02-22T12:21:00.000-08:00
+  - cellType: INPUT
+    cellId: d1e71a3d-357b-41ef-8dfa-b2398f166e1c # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Station
+    config:
+      inputType: DROPDOWN
+      name: station
+      outputType: STRING
+      options:
+        valueOptions:
+          - MCS
+          - MSS
+      defaultValue: MCS
+  - cellType: INPUT
+    cellId: 90f69cb5-9bc1-4f9c-b7ca-c78fc2dc3ed6 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Material
+    config:
+      inputType: DROPDOWN
+      name: material
+      outputType: STRING
+      options:
+        valueOptions:
+          - MSW
+          - Res organics
+          - Com organics
+          - Wood
+          - Yd
+      defaultValue: MSW
+  - cellType: INPUT
+    cellId: 3f97bd74-80f7-4190-82a7-c0eef86d9d06 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Vehicle
+    config:
+      inputType: DROPDOWN
+      name: vehicle
+      outputType: STRING
+      options:
+        valueOptions:
+          - Truck 1
+          - Truck 2
+          - ...
+          - Truck N
+          - Vehicle Type A
+          - Vehicle Type B
+          - ...
+      defaultValue: Vehicle Type A
+  - cellType: INPUT
+    cellId: dc04e32f-5d5b-4a52-a1d9-f98cc1b6e102 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Fullness
+    config:
+      inputType: SLIDER
+      name: fullness
+      outputType: NUMBER
+      options:
+        min: 0
+        max: 1
+        step: 0.1
+      defaultValue: 0.3
+  - cellType: TEXT
+    cellId: 776e9d93-6966-4cf1-b2f2-781b02156f35 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: paragraph
+          children:
+            - bold: true
+              text: "Estimated Weight:"
+            - text: " X tons"
+  - cellType: TEXT
+    cellId: ae9ba68d-d913-45e5-b85c-eae68493cdea # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: h2
+          children:
+            - text: Experimentation Needed
+        - type: paragraph
+          children:
+            - text: "To arrive at the best model, two criteria are proposed:"
+        - type: ol
+          children:
+            - type: li
+              children:
+                - type: lic
+                  children:
+                    - text: "The predicted weights must be within +/- "
+                    - code: true
+                      text: THIS PERCENTAGE
+                    - text: " of the actual load weights, and "
+            - type: li
+              children:
+                - type: lic
+                  children:
+                    - text: The model should be as simple as possible
+        - type: h3
+          children:
+            - text: Model Accuracy
+        - type: p
+          children:
+            - text: "Any ML model of load weight will not be as accurate as a scale.  ML will overpredict the weight of some loads, and under-predict the weight of others.  Program staff will need to have in mind what "
+            - code: true
+              text: THIS PERCENTAGE
+            - text: " threshold will be to pursue a model-based approach."
+        - type: h3
+          children:
+            - bold: true
+              text: Model Parsimony
+        - type: p
+          children:
+            - text: "Assuming ML can achieve the desired accuracy, experiments should focus on:"
+        - type: ol
+          children:
+            - type: li
+              children:
+                - type: lic
+                  children:
+                    - text: Whether or not timestamp features are needed, and if so, which are most important to include in the resulting model
+            - type: li
+              children:
+                - type: lic
+                  children:
+                    - text: Whether or not truck numbers are needed, or whether the (simpler) vehicle type feature can maintain similar accuracy
+            - type: li
+              children:
+                - type: lic
+                  children:
+                    - text: How best to implement the fullness feature (numerical, or categorical)
+appLayout:
+  fullWidth: false
+  visibleMetadataFields:
+    - NAME
+    - DESCRIPTION
+    - AUTHOR
+    - LAST_EDITED
+    - LAST_RUN
+    - CATEGORIES
+    - STATUS
+    - TABLE_OF_CONTENTS
+  rows:
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: d9707eb5-fe70-4d16-a03f-e59d5a261009
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: cfadba22-5d2a-4b5f-9d71-21d63023f36a
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 4a21a9d0-6572-4b63-a75e-01dd8215a603
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 30
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: bc564cf4-b42a-4b20-8235-74c45b228ee5
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 9920a8f0-8b12-4dbd-9d6c-025d248eb8c5
+              height: null
+              showLabel: false
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: befe29f2-86a3-445f-bb66-a643bdc51f61
+              height: null
+              showLabel: false
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: d342ffd7-e654-4da4-84a3-bcb19b2df189
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 48
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: ce4c37c8-0ba1-4af3-a9f5-4aecbdd78619
+              height: null
+              showLabel: false
+        - start: 48
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 2f6cdb5f-7771-44b0-a122-feef1fb33ed8
+              height: null
+              showLabel: false
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 59974af4-d6a5-4813-b796-6a155bc858b2
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 5d659bcd-3fdb-4d14-9ed0-c7d357aa0059
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 59ea867b-62a6-4e3d-8382-c50353dc3e85
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: e29e351e-eea8-45b7-b527-9764e78e2a2b
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: de044781-9f7f-4be1-b0c7-5646472df8a0
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 30
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 1587fcd1-2505-495c-8c31-7de496aed216
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 30
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: d1e71a3d-357b-41ef-8dfa-b2398f166e1c
+              height: null
+              showLabel: true
+        - start: 30
+          end: 60
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 90f69cb5-9bc1-4f9c-b7ca-c78fc2dc3ed6
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 30
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 3f97bd74-80f7-4190-82a7-c0eef86d9d06
+              height: null
+              showLabel: true
+        - start: 30
+          end: 60
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: dc04e32f-5d5b-4a52-a1d9-f98cc1b6e102
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 30
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 776e9d93-6966-4cf1-b2f2-781b02156f35
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: ae9ba68d-d913-45e5-b85c-eae68493cdea
+              height: null
+              showLabel: true

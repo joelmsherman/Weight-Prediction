@@ -1,0 +1,26 @@
+Description,Value
+Session id,7512
+Target,Tons
+Target type,Regression
+Original data shape,"(923207, 5)"
+Transformed data shape,"(923207, 31)"
+Transformed train set shape,"(646244, 31)"
+Transformed test set shape,"(276963, 31)"
+Ordinal features,1
+Numeric features,1
+Categorical features,3
+Preprocess,True
+Imputation type,simple
+Numeric imputation,mean
+Categorical imputation,mode
+Maximum one-hot encoding,25
+Encoding method,
+Normalize,True
+Normalize method,zscore
+Fold Generator,KFold
+Fold Number,10
+CPU Jobs,-1
+Use GPU,True
+Log Experiment,False
+Experiment Name,reg-default-name
+USI,47d2

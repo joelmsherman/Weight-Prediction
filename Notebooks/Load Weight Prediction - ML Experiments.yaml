@@ -1,0 +1,1935 @@
+schemaVersion: 2
+meta:
+  sourceVersionId: b2a130dc-00e6-4537-b293-37cfff10f283 # DO NOT CHANGE - Hex uses this to match up project versions when reimporting the file
+  description: "This notebook details the results of machine learning experiments that aim to find a model that accurately predicts the weights of loads at Metro transfer stations.  "
+  projectId: cb57a2de-6842-4ea2-83fd-9fc7a47b6f48 # DO NOT CHANGE - Unique ID of the project from which this file was generated
+  title: Load Weight Prediction - ML Experiments
+  timezone: null
+  appTheme: LIGHT
+  codeLanguage: PYTHON
+  status:
+    name: Production
+  categories:
+    - name: Public
+  castDecimalsDefault: true
+  logicQueryCacheTimeout: null
+  publishedQueryCacheTimeout: null
+projectAssets:
+  dataConnections: []
+  envVars: []
+  secrets: []
+sharedAssets:
+  secrets: []
+  vcsPackages: []
+  dataConnections: []
+cells:
+  - cellType: MARKDOWN
+    cellId: 6ec78bcf-9bcb-4842-a6af-e9dd926f326e # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Intro Text
+    config:
+      source: |-
+        ## Background
+        The goal of these experiments is to find a parsimonious and best-fitting model that accurately predicts load weights at Metro's transfer stations.  Parsimony is of particular importance when the model is deployed into the field, so that staff can make minimal feature observations and generate predictions very quickly. 
+
+        ## Experiments
+        A baseline and 3 alternative regression models were trained and tested.<br><br>
+
+        **1. Baseline:** This experiment trains a baseline model on the following set of features:
+
+        * *Timestamp:* Date and time of the load's arrival, which contain features such as year, month, day of week and hour of the day of arrival.
+        * *Station:* Facility (Metro Central or Metro South) to which the load is arriving.
+        * *Material:* Dominant material stream (MSW, residential or commercial organics, wood or yard debris) arriving in the load.
+        * *Vehicle:*  Information about the arriving vehicle, including it's type or truck number (if known).
+        * *Fullness* The fullness of a vehicle arriving at Station s with Material m, relative to it's historical max for s and m over the data duration, expressed as a percentage with two decimal precision (i.e. scale of 1 to 100).
+
+        These features were derived from [an exploratory data analysis](https://app.hex.tech/2737cf3a-31c1-4361-9f90-8dea0b629cf0/hex/fa95f966-0912-42ca-9c83-9e14b785420f/draft/logic) of over 4 million transactions at the stations.  For the basline, 18 distinct regressors were trained and the best-fitting model was selected in terms of the lowest Mean Absolute Error (MAE).<br><br>
+
+        **2. No Datetime:** This experiment tests the importance of the date and time features by dropping the [TimeStamp] column prior to model training, ceteris paribus.<br><br>
+
+        **3. No Truck Number:** This experiment tests the importance of truck numbers, in addition to general vehicles types, by re-engineering the [Vehicle] so that it only included general vehicle types for each example, ceteris paribus.<br><br>
+
+        **4. No Datetime And No Truck Number:** This experiment drops the [TimeStamp] column AND re-engineers the [Vehicle] column by excluding truck numbers, ceteris paribus.<br><br>
+
+        **5. No Fullness:** This experiment tests the important of the fullness feature by dropping the [Fullness] column, ceteris paribus.
+
+        ### Data Preprocessing
+        To facilitate ML model training within the compute resources available, data was truncated to the last 2 years of transactions (April 1, 2021 through March 31, 2023).  This resulted in a dataset of about 923K records.  Data was pre-processed by imputing missing values, using a mean imputer for numeric columns (Tons, Fullness), and a mode imputer for categorical columns (Station, Material, and Vehicle).  Categorical columns were encoded using one-hot encoding, and the Tons target was normalized using a z-score method given its highly skewed distribution.
+
+        ### Test Harness
+        The 923K dataset was randomly shuffled and split into training and test datasets using a 70/30 split, respectively.  This resulted in a training dataset of about 646K records, and a test (hold-out) dataset of about 277K records.  Models were trained using 10-fold cross validation, and evaluated against hold-out data to validate performance.  No model optimization was performed in this set of experiments.
+
+        ## Results
+
+        ### Baseline
+        The cross-validated training scores of all 18 regressors showed the lowest MAE on the Extra Trees Regressor.  Extra Trees regressors are ensembled decision tree learners that create multiple decision trees, each based on a random subset of the training data, and each with random splits in the tree.  The results of each tree are combined to make a prediction, reducing the impact of the biases and errors of individual trees.  This often results in a more accurate prediction.
+  - cellType: SQL
+    cellId: 60f27e98-4587-42ab-821d-77ddcb9a0c7a # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Baseline cvscores
+    config:
+      source: |-
+        WITH numbered_rows AS (
+            SELECT
+                "MAE",
+                row_number() OVER () AS "Fold"
+            FROM "exp1_training.csv"
+        ),
+
+        max_fold AS (
+            SELECT max("Fold") - 1 AS second_last_fold
+            FROM numbered_rows
+        )
+
+        SELECT
+            nr."Fold",
+            nr."MAE"
+        FROM numbered_rows AS nr
+        INNER JOIN max_fold AS mf
+            ON nr."Fold" <= mf.second_last_fold - 1;
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: baseline_cvscores
+      useRichDisplay: true
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig:
+        pageSize: 12
+        height: null
+        hideIcons: false
+        hideIndex: false
+        defaultSortColumn: null
+        defaultSortIndexColumn: null
+        defaultSortDirection: ASC
+        conditionalFormatting: null
+        filters: null
+        columnProperties:
+          - originalName: Fold
+            renameTo: null
+            size: 94
+            wrapText: null
+            displayFormat: null
+          - originalName: MAE
+            renameTo: null
+            size: 95
+            wrapText: null
+            displayFormat: null
+        columnOrdering: null
+  - cellType: CODE
+    cellId: d2aea42d-66b5-4567-9867-e4e0bbca3694 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: MAE Calculation
+    config:
+      source: |-
+        baseline_avgtrain = round(baseline_cvscores["MAE"].mean(), 2)
+        baseline_stdtrain = round(baseline_cvscores["MAE"].std(), 3)
+  - cellType: SQL
+    cellId: 3cf6573f-c1c5-4d43-9729-db8752a862c2 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Baseline model comparison
+    config:
+      source: select * from "exp1_compare.csv";
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: baseline_modelcompare
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig:
+        pageSize: 12
+        height: null
+        hideIcons: false
+        hideIndex: false
+        defaultSortColumn: null
+        defaultSortIndexColumn: null
+        defaultSortDirection: ASC
+        conditionalFormatting: null
+        filters: null
+        columnProperties:
+          - originalName: MAE
+            renameTo: null
+            size: 95
+            wrapText: null
+            displayFormat: null
+          - originalName: Model
+            renameTo: null
+            size: 206
+            wrapText: null
+            displayFormat: null
+        columnOrdering: null
+  - cellType: TABLE_DISPLAY
+    cellId: 8440e8a0-3006-40c9-82ec-2d73a05e28ef # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Baseline model comparison
+    config:
+      dataFrameVariableName: baseline_modelcompare
+      resultVariable: table_result
+      tableDisplayConfig:
+        pageSize: 5
+        height: null
+        hideIcons: true
+        hideIndex: true
+        defaultSortColumn: MAE
+        defaultSortIndexColumn: null
+        defaultSortDirection: ASC
+        conditionalFormatting: null
+        filters: null
+        columnProperties:
+          - originalName: MAE
+            renameTo: null
+            size: 95
+            wrapText: null
+            displayFormat: null
+          - originalName: MAPE
+            renameTo: null
+            size: 84
+            wrapText: null
+            displayFormat: null
+          - originalName: MSE
+            renameTo: null
+            size: 76
+            wrapText: null
+            displayFormat: null
+          - originalName: Model
+            renameTo: null
+            size: 206
+            wrapText: null
+            displayFormat: null
+          - originalName: R2
+            renameTo: null
+            size: 71
+            wrapText: null
+            displayFormat: null
+          - originalName: RMSE
+            renameTo: null
+            size: 83
+            wrapText: null
+            displayFormat: null
+          - originalName: RMSLE
+            renameTo: null
+            size: 89
+            wrapText: null
+            displayFormat: null
+          - originalName: TT (Sec)
+            renameTo: null
+            size: 96
+            wrapText: null
+            displayFormat: null
+        columnOrdering: null
+  - cellType: MARKDOWN
+    cellId: d2b3c3db-2c73-4436-bae3-78f514158e71 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: The average **training score was {{baseline_avgtrain}}** across all 10 folds for the extra trees regressor, with a standard deviation of {{baseline_stdtrain}}.
+  - cellType: CHARTV2
+    cellId: c34ac86e-3de1-4fc0-bf24-f64062dfb593 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Baseline (Extra Trees) - Training Scores by Fold
+    config:
+      height: null
+      chartSpec:
+        type: layered
+        layers:
+          - id: 0806ee38-6b28-458f-968b-9ad29bc09813
+            xAxis:
+              type: number
+              style:
+                max: 10
+                min: 1
+                ticks:
+                  count: 10
+                labels: {}
+              numberFormat:
+                format: NUMBER
+                currency: USD
+                columnType: NUMBER
+                numDecimalDigits: 0
+                abbreviateLargeNumbers: false
+              dataFrameColumn: Fold
+            series:
+              - id: 446c4882-29b5-48f5-b6f8-099d42f3551b
+                type: bar
+                axis:
+                  type: number
+                  style:
+                    grid:
+                      style: solid
+                    ticks:
+                      count: 8
+                    labels: {}
+                dataFrameColumns:
+                  - MAE
+                colorOrder: ascending
+                color:
+                  type: static
+                opacity:
+                  type: static
+                  value: 1
+                tooltip:
+                  type: auto
+                barWidth: 1
+                orientation: vertical
+                layout: grouped
+            dataFrame: baseline_cvscores
+        settings:
+          legend:
+            position: right
+          tooltip: true
+          selectionEnabled: false
+      chartSelection: {}
+      resultVariable: filter_result
+  - cellType: CODE
+    cellId: 474db883-77ce-4b5c-9073-5df5c3ca8152 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: |-
+        import pandas as pd
+        exp1_holdout = pd.read_csv("exp1_holdout.csv")
+        baseline_holdout = round(exp1_holdout.iloc[0, 1],3)
+  - cellType: MARKDOWN
+    cellId: 8f5c3491-2125-4fbb-a2cb-3dbdc9cbfe44 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: The **holdout MAE was {{baseline_holdout}}**.  The model created very good predictions with residuals that were normally distributed.
+  - cellType: TEXT
+    cellId: 8fecfa24-c7ff-4bf5-b026-57e4547030f0 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: paragraph
+          children:
+            - text: ""
+            - src: /api/v1/file/258e81d2-9108-4c74-892a-ade659cf3265
+              type: image
+              width: 410
+              children:
+                - text: ""
+            - text: ""
+  - cellType: TEXT
+    cellId: 4d7e0c2e-a8e1-4cdf-b742-e6f1c54acab0 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: paragraph
+          children:
+            - text: ""
+            - src: /api/v1/file/e7b91cec-8856-4f66-bf4b-85d96b0a11a9
+              type: image
+              width: 600
+              children:
+                - text: ""
+            - text: ""
+  - cellType: SQL
+    cellId: f28340cd-3655-410d-af89-757291760fee # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: SecondLastMAE
+    config:
+      source: |-
+        WITH numbered_rows AS (
+            SELECT
+                "MAE",
+                row_number() OVER () AS "Fold"
+            FROM "exp2_training.csv"
+        ),
+
+        max_fold AS (
+            SELECT max("Fold") - 1 AS second_last_fold
+            FROM numbered_rows
+        )
+
+        SELECT
+            nr."Fold",
+            nr."MAE"
+        FROM numbered_rows AS nr
+        INNER JOIN max_fold AS mf
+            ON nr."Fold" <= mf.second_last_fold - 1;
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: noDT_cvscores
+      useRichDisplay: true
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig:
+        pageSize: 12
+        height: null
+        hideIcons: false
+        hideIndex: false
+        defaultSortColumn: null
+        defaultSortIndexColumn: null
+        defaultSortDirection: ASC
+        conditionalFormatting: null
+        filters: null
+        columnProperties:
+          - originalName: Fold
+            renameTo: null
+            size: 94
+            wrapText: null
+            displayFormat: null
+          - originalName: MAE
+            renameTo: null
+            size: 95
+            wrapText: null
+            displayFormat: null
+        columnOrdering: null
+  - cellType: CODE
+    cellId: 058c1561-4f80-4287-83d9-f97ebd16fe8c # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: MAE Calculation
+    config:
+      source: |-
+        noDT_avgtrain = round(noDT_cvscores["MAE"].mean(), 2)
+        noDT_stdtrain = round(noDT_cvscores["MAE"].std(), 3)
+  - cellType: MARKDOWN
+    cellId: e25203c7-bf21-4758-b24c-9837e4ab7d64 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Regressor Performance
+    config:
+      source: |-
+        ### No Datetime
+        An extra trees regressor was trained on all features except for the [TimeStamp] column using 10-fold cross validation while using a controlled random state in order to isolate the effect of date and time features on model performance. The average **training score was {{noDT_avgtrain}}** across all 10 folds, with a standard deviation of {{noDT_stdtrain}}.
+  - cellType: CHARTV2
+    cellId: e264cee9-4551-4996-9611-cc348f839fd5 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: No Datetime - Training Scores by Fold
+    config:
+      height: null
+      chartSpec:
+        type: layered
+        layers:
+          - id: 0806ee38-6b28-458f-968b-9ad29bc09813
+            xAxis:
+              type: number
+              style:
+                max: 10
+                min: 1
+                ticks:
+                  count: 10
+                labels: {}
+              numberFormat:
+                format: NUMBER
+                currency: USD
+                columnType: NUMBER
+                numDecimalDigits: 0
+                abbreviateLargeNumbers: false
+              dataFrameColumn: Fold
+            series:
+              - id: 446c4882-29b5-48f5-b6f8-099d42f3551b
+                type: bar
+                axis:
+                  type: number
+                  style:
+                    grid:
+                      style: solid
+                    ticks:
+                      count: 8
+                    labels: {}
+                dataFrameColumns:
+                  - MAE
+                colorOrder: ascending
+                color:
+                  type: static
+                opacity:
+                  type: static
+                  value: 1
+                tooltip:
+                  type: auto
+                barWidth: 1
+                orientation: vertical
+                layout: grouped
+            dataFrame: noDT_cvscores
+        settings:
+          legend:
+            position: right
+          tooltip: true
+          selectionEnabled: false
+      chartSelection: {}
+      resultVariable: filter_result_2
+  - cellType: CODE
+    cellId: f0d60bea-e0fa-4b99-9bed-54bb93fb23a1 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: CSV Reader
+    config:
+      source: |-
+        exp2_holdout = pd.read_csv("exp2_holdout.csv")
+        noDT_holdout = round(exp2_holdout.iloc[0, 1],2)
+  - cellType: MARKDOWN
+    cellId: e358b771-0853-4206-8bf7-5b0bb531bac0 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: The **holdout MAE was {{noDT_holdout}}**.  The model created very good predictions with residuals that were normally distributed.
+  - cellType: TEXT
+    cellId: a80ea2d8-0218-4d0b-a0f5-82a7e75ad5a5 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: paragraph
+          children:
+            - text: ""
+            - src: /api/v1/file/dcf48fee-c401-4aff-a220-54653d7cc151
+              type: image
+              width: 374
+              children:
+                - text: ""
+            - text: ""
+  - cellType: TEXT
+    cellId: 228d48b2-ebd3-40dc-b6df-9627c0ceeaa3 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: paragraph
+          children:
+            - text: ""
+            - src: /api/v1/file/70fb4d2e-d636-4c67-8c43-cf922bb69ff8
+              type: image
+              width: 600
+              children:
+                - text: ""
+            - text: ""
+  - cellType: SQL
+    cellId: 9831f1fb-93fa-4b82-bcfd-0a5ad8b0d292 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: SecondLastMAEs
+    config:
+      source: |-
+        WITH numbered_rows AS (
+            SELECT
+                "MAE",
+                row_number() OVER () AS "Fold"
+            FROM "exp3_training.csv"
+        ),
+
+        max_fold AS (
+            SELECT max("Fold") - 1 AS second_last_fold
+            FROM numbered_rows
+        )
+
+        SELECT
+            nr."Fold",
+            nr."MAE"
+        FROM numbered_rows AS nr
+        INNER JOIN max_fold AS mf
+            ON nr."Fold" <= mf.second_last_fold - 1;
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: noTN_cvscores
+      useRichDisplay: true
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig:
+        pageSize: 12
+        height: null
+        hideIcons: false
+        hideIndex: false
+        defaultSortColumn: null
+        defaultSortIndexColumn: null
+        defaultSortDirection: ASC
+        conditionalFormatting: null
+        filters: null
+        columnProperties:
+          - originalName: Fold
+            renameTo: null
+            size: 94
+            wrapText: null
+            displayFormat: null
+          - originalName: MAE
+            renameTo: null
+            size: 95
+            wrapText: null
+            displayFormat: null
+        columnOrdering: null
+  - cellType: CODE
+    cellId: fc6343ef-6948-4a3c-85f2-3942ec186cdd # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: MAE Statistics
+    config:
+      source: |-
+        noTN_avgtrain = round(noTN_cvscores["MAE"].mean(), 2)
+        noTN_stdtrain = round(noTN_cvscores["MAE"].std(), 3)
+  - cellType: MARKDOWN
+    cellId: e4254de9-b6d1-44b6-9a90-5ee9e4ed2cbc # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Truck Number Analysis
+    config:
+      source: |-
+        ### No Truck Number
+        An extra trees regressor was trained on all features except that the [Vehicle] column only contained vehicle types, and not truck numbers. As usual, the model was trained using 10-fold cross validation using a controlled random state in order to isolate the effect of truck numbers on model performance. The average **training score was {{noTN_avgtrain}}** across all 10 folds, with a standard deviation of {{noTN_stdtrain}}.
+  - cellType: CHARTV2
+    cellId: 580936e1-7498-4e7d-95bb-e0d4eda86588 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: No Truck Number - Training Scores by Fold
+    config:
+      height: null
+      chartSpec:
+        type: layered
+        layers:
+          - id: 0806ee38-6b28-458f-968b-9ad29bc09813
+            xAxis:
+              type: number
+              style:
+                max: 10
+                min: 1
+                ticks:
+                  count: 10
+                labels: {}
+              numberFormat:
+                format: NUMBER
+                currency: USD
+                columnType: NUMBER
+                numDecimalDigits: 0
+                abbreviateLargeNumbers: false
+              dataFrameColumn: Fold
+            series:
+              - id: 446c4882-29b5-48f5-b6f8-099d42f3551b
+                type: bar
+                axis:
+                  type: number
+                  style:
+                    max: 0.16
+                    min: 0
+                    grid:
+                      style: solid
+                    ticks:
+                      count: 8
+                    labels: {}
+                dataFrameColumns:
+                  - MAE
+                colorOrder: ascending
+                color:
+                  type: static
+                opacity:
+                  type: static
+                  value: 1
+                tooltip:
+                  type: auto
+                barWidth: 1
+                orientation: vertical
+                layout: grouped
+            dataFrame: noTN_cvscores
+        settings:
+          legend:
+            position: right
+          tooltip: true
+          selectionEnabled: false
+      chartSelection: {}
+      resultVariable: filter_result_3
+  - cellType: CODE
+    cellId: 2dc3e460-8599-493b-8a0b-a0ec9fa5e583 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: CSV Processing
+    config:
+      source: |-
+        exp3_holdout = pd.read_csv("exp3_holdout.csv")
+        noTN_holdout = round(exp3_holdout.iloc[0, 1],2)
+  - cellType: MARKDOWN
+    cellId: d25834e7-4c32-4ec0-8cec-fd30bc9cb72e # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Holdout MAE
+    config:
+      source: The **holdout MAE was {{noTN_holdout}}**.  The model created very good predictions with residuals that were normally distributed.
+  - cellType: TEXT
+    cellId: 3a53f240-03b4-47be-9a60-f1d113e26ef3 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: paragraph
+          children:
+            - text: ""
+            - src: /api/v1/file/2b3b3199-ab66-4b5c-8286-f2c611b922bc
+              type: image
+              width: 370
+              children:
+                - text: ""
+            - text: ""
+  - cellType: TEXT
+    cellId: b985e91d-2ce2-4136-aefa-21dfbac1af2a # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: paragraph
+          children:
+            - text: ""
+            - src: /api/v1/file/31e455ac-6287-4c0b-94cc-c90441985d28
+              type: image
+              width: 600
+              children:
+                - text: ""
+            - text: ""
+  - cellType: SQL
+    cellId: 93327db9-6fa8-4a5d-a058-0b1f54329b55 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Nodt notn cvscores
+    config:
+      source: |-
+        WITH numbered_rows AS (
+            SELECT
+                "MAE",
+                row_number() OVER () AS "Fold"
+            FROM "exp5_training.csv"
+        ),
+
+        max_fold AS (
+            SELECT max("Fold") - 1 AS second_last_fold
+            FROM numbered_rows
+        )
+
+        SELECT
+            nr."Fold",
+            nr."MAE"
+        FROM numbered_rows AS nr
+        INNER JOIN max_fold AS mf
+            ON nr."Fold" <= mf.second_last_fold - 1;
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: noDT_noTN_cvscores
+      useRichDisplay: true
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig:
+        pageSize: 12
+        height: null
+        hideIcons: false
+        hideIndex: false
+        defaultSortColumn: null
+        defaultSortIndexColumn: null
+        defaultSortDirection: ASC
+        conditionalFormatting: null
+        filters: null
+        columnProperties:
+          - originalName: Fold
+            renameTo: null
+            size: 94
+            wrapText: null
+            displayFormat: null
+          - originalName: MAE
+            renameTo: null
+            size: 95
+            wrapText: null
+            displayFormat: null
+        columnOrdering: null
+  - cellType: CODE
+    cellId: 53d52f2b-09fb-4929-bef1-bb86b024b261 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: |-
+        noDT_noTN_avgtrain = round(noDT_noTN_cvscores["MAE"].mean(), 2)
+        noDT_noTN_stdtrain = round(noDT_noTN_cvscores["MAE"].std(), 3)
+  - cellType: MARKDOWN
+    cellId: e328a54d-c1fa-424e-8b37-41cb73c3b32c # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: |-
+        ### No Datetime and No Truck Number
+        An extra trees regressor was trained on all features except that the [Vehicle] column only contained vehicle types, and not truck numbers, and the [Timestamp] columns was dropped. As usual, the model was trained using 10-fold cross validation using a controlled random state in order to isolate the effect of BOTH data/time features and truck numbers on model performance. The average **training score was {{noDT_noTN_avgtrain}}** across all 10 folds, with a standard deviation of {{noDT_noTN_stdtrain}}.
+  - cellType: CHARTV2
+    cellId: e787e3f1-c6ed-451b-ba51-35de6ba5536f # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: No Datetime AND Truck Number - Training Scores by Fold
+    config:
+      height: null
+      chartSpec:
+        type: layered
+        layers:
+          - id: 0806ee38-6b28-458f-968b-9ad29bc09813
+            xAxis:
+              type: number
+              style:
+                max: 10
+                min: 1
+                ticks:
+                  count: 10
+                labels: {}
+              numberFormat:
+                format: NUMBER
+                currency: USD
+                columnType: NUMBER
+                numDecimalDigits: 0
+                abbreviateLargeNumbers: false
+              dataFrameColumn: Fold
+            series:
+              - id: 446c4882-29b5-48f5-b6f8-099d42f3551b
+                type: bar
+                axis:
+                  type: number
+                  style:
+                    max: 0.16
+                    min: 0
+                    grid:
+                      style: solid
+                    ticks:
+                      count: 8
+                    labels: {}
+                dataFrameColumns:
+                  - MAE
+                colorOrder: ascending
+                color:
+                  type: static
+                opacity:
+                  type: static
+                  value: 1
+                tooltip:
+                  type: auto
+                barWidth: 1
+                orientation: vertical
+                layout: grouped
+            dataFrame: noDT_noTN_cvscores
+        settings:
+          legend:
+            position: right
+          tooltip: true
+          selectionEnabled: false
+      chartSelection: {}
+      resultVariable: filter_result_4
+  - cellType: CODE
+    cellId: 62a528b4-9aa9-447e-8b6d-355c8fc154df # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: |-
+        exp5_holdout = pd.read_csv("exp5_holdout.csv")
+        noDT_noTN_holdout = round(exp5_holdout.iloc[0, 1],2)
+  - cellType: MARKDOWN
+    cellId: 0f5e4d47-dd68-42a3-b319-7ce979a03849 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: The **holdout MAE was {{noDT_noTN_holdout}}**.  The model created very good predictions with residuals that were normally distributed.
+  - cellType: TEXT
+    cellId: 6f35373a-3a85-4eef-b7c5-2c9d78f15b5d # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: paragraph
+          children:
+            - text: ""
+            - src: /api/v1/file/e5bed3c3-19b9-4f59-9558-f792549d664e
+              type: image
+              width: 387
+              children:
+                - text: ""
+            - text: ""
+  - cellType: TEXT
+    cellId: c5372b3f-e47c-4b33-b7b5-9e04bfef1925 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: paragraph
+          children:
+            - text: ""
+            - src: /api/v1/file/1dba9624-bff6-4530-a537-b783f90401b1
+              type: image
+              width: 600
+              children:
+                - text: ""
+            - text: ""
+  - cellType: SQL
+    cellId: 9c5f1482-ae84-425b-a324-6f6979805b81 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Nofull cvscores
+    config:
+      source: |-
+        WITH numbered_rows AS (
+            SELECT
+                "MAE",
+                row_number() OVER () AS "Fold"
+            FROM "exp4_training.csv"
+        ),
+
+        max_fold AS (
+            SELECT max("Fold") - 1 AS second_last_fold
+            FROM numbered_rows
+        )
+
+        SELECT
+            nr."Fold",
+            nr."MAE"
+        FROM numbered_rows AS nr
+        INNER JOIN max_fold AS mf
+            ON nr."Fold" <= mf.second_last_fold - 1;
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: noFull_cvscores
+      useRichDisplay: true
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig:
+        pageSize: 12
+        height: null
+        hideIcons: false
+        hideIndex: false
+        defaultSortColumn: null
+        defaultSortIndexColumn: null
+        defaultSortDirection: ASC
+        conditionalFormatting: null
+        filters: null
+        columnProperties:
+          - originalName: Fold
+            renameTo: null
+            size: 94
+            wrapText: null
+            displayFormat: null
+          - originalName: MAE
+            renameTo: null
+            size: 95
+            wrapText: null
+            displayFormat: null
+        columnOrdering: null
+  - cellType: CODE
+    cellId: 26f2a676-9c99-4006-9e6a-aec3dba0493c # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: |-
+        noFull_avgtrain = round(noFull_cvscores["MAE"].mean(), 2)
+        noFull_stdtrain = round(noFull_cvscores["MAE"].std(), 3)
+  - cellType: MARKDOWN
+    cellId: d4e39a4d-71d4-463c-9d41-8a617c734e01 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: |-
+        ### No Fullness
+        An extra trees regressor was trained on all features except [Fullness]. As usual, the model was trained using 10-fold cross validation using a controlled random state in order to isolate the effect of vehicle fullness on model performance. The average **training score was {{noFull_avgtrain}}** across all 10 folds, with a standard deviation of {{noFull_stdtrain}}.
+  - cellType: CHARTV2
+    cellId: 9b4dfe14-9a97-4c19-8fea-6d01bf39674e # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: No Fullness - Training Scores by Fold
+    config:
+      height: null
+      chartSpec:
+        type: layered
+        layers:
+          - id: 0806ee38-6b28-458f-968b-9ad29bc09813
+            xAxis:
+              type: number
+              style:
+                max: 10
+                min: 1
+                ticks:
+                  count: 10
+                labels: {}
+              numberFormat:
+                format: NUMBER
+                currency: USD
+                columnType: NUMBER
+                numDecimalDigits: 0
+                abbreviateLargeNumbers: false
+              dataFrameColumn: Fold
+            series:
+              - id: 446c4882-29b5-48f5-b6f8-099d42f3551b
+                type: bar
+                axis:
+                  type: number
+                  style:
+                    min: 0
+                    grid:
+                      style: solid
+                    ticks:
+                      count: 8
+                    labels: {}
+                dataFrameColumns:
+                  - MAE
+                colorOrder: ascending
+                color:
+                  type: static
+                opacity:
+                  type: static
+                  value: 1
+                tooltip:
+                  type: auto
+                barWidth: 1
+                orientation: vertical
+                layout: grouped
+            dataFrame: noFull_cvscores
+        settings:
+          legend:
+            position: right
+          tooltip: true
+          selectionEnabled: false
+      chartSelection: {}
+      resultVariable: filter_result_5
+  - cellType: CODE
+    cellId: 593f4b6e-8f25-4499-9f2f-3f0bc3b43cb2 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: |-
+        exp4_holdout = pd.read_csv("exp4_holdout.csv")
+        noFull_holdout = round(exp4_holdout.iloc[0, 1],2)
+  - cellType: MARKDOWN
+    cellId: d847753f-3e71-4b62-be33-ea0de87ebba0 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: The **holdout MAE was {{noFull_holdout}}**.  While the residuals were normally distributed, the error in the model's predictions increased significantly.
+  - cellType: TEXT
+    cellId: d8f2ecf4-eef0-4f87-a0c5-d03359daca73 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: paragraph
+          children:
+            - text: ""
+            - src: /api/v1/file/7c4c9c1c-422c-43fe-8e82-7ff4adf638d6
+              type: image
+              width: 370
+              children:
+                - text: ""
+            - text: ""
+  - cellType: TEXT
+    cellId: 6137fb14-b8ab-42ca-b5e6-736526c56273 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      richText:
+        - type: paragraph
+          children:
+            - text: ""
+            - src: /api/v1/file/45a211f3-0f3d-433b-859d-81ec2743a35c
+              type: image
+              width: 600
+              children:
+                - text: ""
+            - text: ""
+  - cellType: MARKDOWN
+    cellId: edab7fc5-f900-4181-a9df-4a284f515872 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: |-
+        ## Best Model
+        The experiment results showed that the model without date, time and truck number features generalized the best and had the lowest error.  Parsimony won the day. This is likely due to the reduction in dimensionality of the feature space.  Dimensionality reduction often helps reduce overfitting the model, which leads to better generalization performance and, hence, lower mean absolute errors.  For decision tree regressors, in particular, when there are many possible splits (as is the case with higher dimensionality), they can find spurious relationships between the feature and the target variable that do not generalize well to new data. This overfitting can cause the model to perform poorly on hold-out data.  So when we reduce the cardinality of the Vehicle feature, for example, to only include about 25 different vehicle types, the model has fewer possible splits to choose from. The model can learn more meaningful relationships between the simplified feature and the target variable, which can and has improved the model's performance. 
+
+        The final feature set of the model:
+
+        * *Station:* Facility (Metro Central or Metro South) to which the load is arriving.
+        * *Material:* Dominant material stream (MSW, residential or commercial organics, wood or yard debris) arriving in the load.
+        * *Vehicle:*  Arriving vehicle type.
+        * *Fullness* Fullness of a vehicle, expressed as a percentage between 0 and 1.
+
+        ### Holdout/Test Performance
+        #### Overall
+        Over the two year period April 2021 through March 2023, the MAE of the 277K holdout loads was about .03 tons.  On a total tonnage basis, the model predicted 382,200 tons, in comparison to the 382,000 actual tons in the sample.  
+  - cellType: SQL
+    cellId: 90d36102-add3-4c40-be18-bba133af1ee4 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Holdout data
+    config:
+      source: |-
+        SELECT
+            Station,
+            Material,
+            Vehicle,
+            Fullness,
+            Tons AS Actuals,
+            prediction_label AS Predicted,
+            ABS(Tons - prediction_label) AS AbsError
+
+        FROM 
+        "exp5_pred_holdout.csv";
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: holdout_data
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig: null
+  - cellType: SQL
+    cellId: dd61400b-3b47-4204-8b3e-7a9febb95610 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Overall
+    config:
+      source: |-
+        SELECT
+            COUNT(Actuals) AS N,
+            SUM(Actuals) AS ActualTons, 
+            SUM(Predicted) AS PredictedTons, 
+            AVG(AbsError) AS MAE
+        FROM holdout_data
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: overall
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig: null
+  - cellType: METRIC
+    cellId: 5491f3f3-df50-4800-ba9f-cf6981e9e858 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      title: "# of loads"
+      valueVariableName: overall
+      showComparison: false
+      comparisonType: VALUE
+      comparisonVariableName: null
+      comparisonFormat: null
+      comparisonLabel: ""
+      displayFormat:
+        format: NUMBER
+        currency: USD
+        columnType: NUMBER
+        numDecimalDigits: 0
+        abbreviateLargeNumbers: true
+      valueColumn: N
+      valueRowIndex: 0
+      comparisonColumn: null
+      comparisonRowIndex: null
+  - cellType: METRIC
+    cellId: e7e115f6-fce4-4648-aae7-20277eba6fb8 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      title: MAE
+      valueVariableName: overall
+      showComparison: false
+      comparisonType: VALUE
+      comparisonVariableName: null
+      comparisonFormat: null
+      comparisonLabel: ""
+      displayFormat:
+        format: NUMBER
+        currency: USD
+        columnType: NUMBER
+        numDecimalDigits: 3
+        abbreviateLargeNumbers: false
+      valueColumn: MAE
+      valueRowIndex: 0
+      comparisonColumn: null
+      comparisonRowIndex: null
+  - cellType: METRIC
+    cellId: e6cca60f-7d97-47f1-88cd-90cd45ce1f45 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      title: Actual tons
+      valueVariableName: overall
+      showComparison: false
+      comparisonType: VALUE
+      comparisonVariableName: null
+      comparisonFormat: null
+      comparisonLabel: ""
+      displayFormat:
+        format: NUMBER
+        currency: USD
+        columnType: NUMBER
+        numDecimalDigits: 1
+        abbreviateLargeNumbers: true
+      valueColumn: ActualTons
+      valueRowIndex: 0
+      comparisonColumn: null
+      comparisonRowIndex: null
+  - cellType: METRIC
+    cellId: 09e59e37-8a44-45a5-ad8b-3c8f2f3e67ff # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      title: Predicted tons
+      valueVariableName: overall
+      showComparison: false
+      comparisonType: VALUE
+      comparisonVariableName: null
+      comparisonFormat: null
+      comparisonLabel: ""
+      displayFormat:
+        format: NUMBER
+        currency: USD
+        columnType: NUMBER
+        numDecimalDigits: 1
+        abbreviateLargeNumbers: true
+      valueColumn: PredictedTons
+      valueRowIndex: 0
+      comparisonColumn: null
+      comparisonRowIndex: null
+  - cellType: MARKDOWN
+    cellId: c5050fb5-d08e-4290-91d7-af2a5213d82f # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: |-
+        #### By Station
+        The MAE across stations was robust within stations, other things constant.
+  - cellType: SQL
+    cellId: dfbb2f10-487e-4e2b-b9db-76363c99693c # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Station
+    config:
+      source: |-
+        SELECT 
+            Station, 
+            COUNT(Actuals) AS N,
+            AVG(AbsError) AS MAE, 
+            SUM(Actuals) AS ActualTons, 
+            SUM(Predicted) AS PredictedTons
+
+            FROM holdout_data
+
+            GROUP BY 
+            Station
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: station
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig: null
+  - cellType: CHARTV2
+    cellId: df98768e-b949-4acd-871c-746d65911763 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: MAE by Station
+    config:
+      height: 468
+      chartSpec:
+        type: layered
+        layers:
+          - id: 46b237eb-22b8-46a0-841c-ae8343d8b953
+            xAxis:
+              type: string
+              style:
+                ticks: {}
+                labels: {}
+              title: " "
+              dataFrameColumn: Station
+            series:
+              - id: bd32c2c6-0102-4c33-8fc8-d033ba5bef4e
+                type: bar
+                axis:
+                  type: number
+                  style:
+                    max: 0.4
+                    min: 0
+                    ticks: {}
+                    labels: {}
+                  numberFormat:
+                    format: NUMBER
+                    currency: USD
+                    columnType: NUMBER
+                    numDecimalDigits: 3
+                    abbreviateLargeNumbers: false
+                dataFrameColumns:
+                  - MAE
+                colorOrder: ascending
+                color:
+                  type: static
+                opacity:
+                  type: static
+                  value: 1
+                tooltip:
+                  type: manual
+                  fields:
+                    - type: number
+                      dataFrameColumn: N
+                    - type: number
+                      dataFrameColumn: ActualTons
+                    - type: number
+                      dataFrameColumn: PredictedTons
+                dataLabels:
+                  position: inside-end
+                barWidth: 1
+                orientation: horizontal
+                layout: grouped
+            dataFrame: station
+        settings:
+          legend:
+            position: right
+          tooltip: true
+          selectionEnabled: false
+      chartSelection: {}
+      resultVariable: filter_result_6
+  - cellType: MARKDOWN
+    cellId: 2bf43f1c-b98b-47ae-ac3e-d9e6b187a51f # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: |-
+        #### By Material
+        By material, residential organics, commercial organics and wood loads had MAE slightly above the .03 average, while yard debris loads had MAE slighly below average.  MSW, the predominant material type in the sample, had a MAE at .03 tons. 
+  - cellType: SQL
+    cellId: 822b74f4-6ff9-4bba-9fec-a6b1b12f9ae0 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Material
+    config:
+      source: |-
+        SELECT 
+            Material, 
+            COUNT(Actuals) AS N,
+            AVG(AbsError) AS MAE, 
+            SUM(Actuals) AS ActualTons, 
+            SUM(Predicted) AS PredictedTons
+
+            FROM holdout_data
+
+            GROUP BY 
+            Material
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: material
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig: null
+  - cellType: CHARTV2
+    cellId: 282f9cd2-8d29-4946-9312-b16e9630e8f1 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: MAE by Material
+    config:
+      height: 468
+      chartSpec:
+        type: layered
+        layers:
+          - id: 46b237eb-22b8-46a0-841c-ae8343d8b953
+            xAxis:
+              sort:
+                - ResOrg
+                - ComOrg
+                - Wood
+                - MSW
+                - Yd
+              type: string
+              style:
+                ticks: {}
+                labels: {}
+              title: " "
+              dataFrameColumn: Material
+            series:
+              - id: bd32c2c6-0102-4c33-8fc8-d033ba5bef4e
+                type: bar
+                axis:
+                  type: number
+                  style:
+                    max: 0.4
+                    min: 0
+                    ticks: {}
+                    labels: {}
+                  numberFormat:
+                    format: NUMBER
+                    currency: USD
+                    columnType: NUMBER
+                    numDecimalDigits: 3
+                    abbreviateLargeNumbers: false
+                dataFrameColumns:
+                  - MAE
+                colorOrder: ascending
+                color:
+                  type: static
+                opacity:
+                  type: static
+                  value: 1
+                tooltip:
+                  type: manual
+                  fields:
+                    - type: number
+                      dataFrameColumn: N
+                    - type: number
+                      dataFrameColumn: ActualTons
+                    - type: number
+                      dataFrameColumn: PredictedTons
+                dataLabels:
+                  position: inside-end
+                barWidth: 1
+                orientation: horizontal
+                layout: grouped
+            dataFrame: material
+        settings:
+          legend:
+            position: right
+          tooltip: true
+          selectionEnabled: false
+      chartSelection: {}
+      resultVariable: filter_result_7
+  - cellType: MARKDOWN
+    cellId: 605c8c1a-0661-4523-b05a-137d948a6bed # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: |-
+        #### By Vehicle
+        The variability in MAE was most prominent with respect to vehicle type.  Most vehicle types, and indeed the vast majority of the loads, had MAE below .04 tons, but several vehicle types exhibited high MAE, including Special types, Tankers, Transfer trucks, and the like.  These types of vehicles are much less predominant, however.  
+  - cellType: SQL
+    cellId: 963bdca6-71eb-4809-86cb-6cf59e649cb7 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Vehicle
+    config:
+      source: |-
+        SELECT 
+            Vehicle, 
+            COUNT(Actuals) AS N,
+            AVG(AbsError) AS MAE, 
+            SUM(Actuals) AS ActualTons, 
+            SUM(Predicted) AS PredictedTons
+
+            FROM holdout_data
+
+            GROUP BY 
+            Vehicle
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: vehicle
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig: null
+  - cellType: CHARTV2
+    cellId: ab4894d5-f6dd-4f17-acf5-7c5907b24d86 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: MAE by Vehicle
+    config:
+      height: 468
+      chartSpec:
+        type: layered
+        layers:
+          - id: 46b237eb-22b8-46a0-841c-ae8343d8b953
+            xAxis:
+              sort: -x
+              type: string
+              style:
+                ticks: {}
+                labels: {}
+              title: " "
+              dataFrameColumn: Vehicle
+            series:
+              - id: bd32c2c6-0102-4c33-8fc8-d033ba5bef4e
+                type: bar
+                axis:
+                  type: number
+                  style:
+                    ticks: {}
+                    labels: {}
+                  numberFormat:
+                    format: NUMBER
+                    currency: USD
+                    columnType: NUMBER
+                    numDecimalDigits: 3
+                    abbreviateLargeNumbers: false
+                dataFrameColumns:
+                  - MAE
+                colorOrder: ascending
+                color:
+                  type: static
+                opacity:
+                  type: static
+                  value: 1
+                tooltip:
+                  type: manual
+                  fields:
+                    - type: number
+                      dataFrameColumn: N
+                    - type: number
+                      dataFrameColumn: ActualTons
+                    - type: number
+                      dataFrameColumn: PredictedTons
+                barWidth: 1
+                orientation: horizontal
+                layout: grouped
+            dataFrame: vehicle
+        settings:
+          legend:
+            position: right
+          tooltip: true
+          selectionEnabled: false
+      chartSelection: {}
+      resultVariable: filter_result_8
+  - cellType: MARKDOWN
+    cellId: 29d8e019-de60-432d-8991-c56d3afd5f35 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      source: |-
+        #### Across Categoricals
+        The MAE across combinations of station, material and vehicle features varied significantly.  The combination with the lowest error (with more than 30 samples) was wood loads entering Metro Central in a Standard Pickup (MAE = .001).  The combination with the highest error (with more than 30 samples) was MSW loads entering Metro Central in Tankers (MAE = .234).   
+  - cellType: SQL
+    cellId: 7ef22b89-adfb-4438-887b-31e71b466837 # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: Allcatfeatures
+    config:
+      source: |
+        SELECT 
+            Station, 
+            Material, 
+            Vehicle,
+            COUNT(Actuals) AS N,
+            AVG(AbsError) AS MAE, 
+            SUM(Actuals) AS ActualTons, 
+            SUM(Predicted) AS PredictedTons
+
+            FROM holdout_data
+
+            GROUP BY 
+            Station, 
+            Material, 
+            Vehicle
+      dataFrameCell: true
+      dataConnectionId: null
+      resultVariableName: allcatfeatures
+      useRichDisplay: false
+      sqlCellOutputType: PANDAS
+      useQueryMode: false
+      castDecimals: true
+      useNativeDates: true
+      outputFilteredResult: false
+      allowDuplicateColumns: false
+      tableDisplayConfig: null
+  - cellType: TABLE_DISPLAY
+    cellId: d133f17a-a334-45e4-a5ef-610feab2891d # DO NOT CHANGE - Hex uses this to match up cells when reimporting the file, and detect any changes to existing cells
+    cellLabel: null
+    config:
+      dataFrameVariableName: allcatfeatures
+      resultVariable: table_result_2
+      tableDisplayConfig:
+        pageSize: 12
+        height: null
+        hideIcons: true
+        hideIndex: true
+        defaultSortColumn: N
+        defaultSortIndexColumn: null
+        defaultSortDirection: DESC
+        conditionalFormatting:
+          rulesets: []
+        filters: null
+        columnProperties:
+          - originalName: ActualTons
+            renameTo: Actual Tons
+            size: 122
+            wrapText: null
+            displayFormat:
+              format: NUMBER
+              currency: USD
+              columnType: NUMBER
+              numDecimalDigits: 0
+              abbreviateLargeNumbers: false
+          - originalName: MAE
+            renameTo: null
+            size: 97
+            wrapText: null
+            displayFormat:
+              format: NUMBER
+              currency: USD
+              columnType: NUMBER
+              numDecimalDigits: 3
+              abbreviateLargeNumbers: false
+          - originalName: Material
+            renameTo: null
+            size: 115
+            wrapText: null
+            displayFormat: null
+          - originalName: N
+            renameTo: null
+            size: 84
+            wrapText: null
+            displayFormat: null
+          - originalName: PredictedTons
+            renameTo: Predicted Tons
+            size: 123
+            wrapText: null
+            displayFormat:
+              format: NUMBER
+              currency: USD
+              columnType: NUMBER
+              numDecimalDigits: 0
+              abbreviateLargeNumbers: false
+          - originalName: Station
+            renameTo: null
+            size: 109
+            wrapText: null
+            displayFormat: null
+          - originalName: Vehicle
+            renameTo: null
+            size: 197
+            wrapText: null
+            displayFormat: null
+        columnOrdering: null
+appLayout:
+  fullWidth: false
+  visibleMetadataFields:
+    - NAME
+    - DESCRIPTION
+    - AUTHOR
+    - LAST_EDITED
+    - LAST_RUN
+    - CATEGORIES
+    - STATUS
+    - TABLE_OF_CONTENTS
+  rows:
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 6ec78bcf-9bcb-4842-a6af-e9dd926f326e
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 114
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 8440e8a0-3006-40c9-82ec-2d73a05e28ef
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: c34ac86e-3de1-4fc0-bf24-f64062dfb593
+              height: 360
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: d2b3c3db-2c73-4436-bae3-78f514158e71
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 8f5c3491-2125-4fbb-a2cb-3dbdc9cbfe44
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 51
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 8fecfa24-c7ff-4bf5-b026-57e4547030f0
+              height: null
+              showLabel: true
+        - start: 54
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 4d7e0c2e-a8e1-4cdf-b742-e6f1c54acab0
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: e25203c7-bf21-4758-b24c-9837e4ab7d64
+              height: null
+              showLabel: false
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: e264cee9-4551-4996-9611-cc348f839fd5
+              height: 385
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: e358b771-0853-4206-8bf7-5b0bb531bac0
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 51
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: a80ea2d8-0218-4d0b-a0f5-82a7e75ad5a5
+              height: null
+              showLabel: true
+        - start: 54
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 228d48b2-ebd3-40dc-b6df-9627c0ceeaa3
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: e4254de9-b6d1-44b6-9a90-5ee9e4ed2cbc
+              height: null
+              showLabel: false
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 580936e1-7498-4e7d-95bb-e0d4eda86588
+              height: 340
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: d25834e7-4c32-4ec0-8cec-fd30bc9cb72e
+              height: null
+              showLabel: false
+    - columns:
+        - start: 0
+          end: 54
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 3a53f240-03b4-47be-9a60-f1d113e26ef3
+              height: null
+              showLabel: true
+        - start: 54
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: b985e91d-2ce2-4136-aefa-21dfbac1af2a
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: e328a54d-c1fa-424e-8b37-41cb73c3b32c
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: e787e3f1-c6ed-451b-ba51-35de6ba5536f
+              height: 380
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 0f5e4d47-dd68-42a3-b319-7ce979a03849
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 54
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 6f35373a-3a85-4eef-b7c5-2c9d78f15b5d
+              height: null
+              showLabel: true
+        - start: 57
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: c5372b3f-e47c-4b33-b7b5-9e04bfef1925
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: d4e39a4d-71d4-463c-9d41-8a617c734e01
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 9b4dfe14-9a97-4c19-8fea-6d01bf39674e
+              height: 350
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: d847753f-3e71-4b62-be33-ea0de87ebba0
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 57
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: d8f2ecf4-eef0-4f87-a0c5-d03359daca73
+              height: null
+              showLabel: true
+        - start: 57
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 6137fb14-b8ab-42ca-b5e6-736526c56273
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: edab7fc5-f900-4181-a9df-4a284f515872
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 60
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 5491f3f3-df50-4800-ba9f-cf6981e9e858
+              height: null
+              showLabel: true
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: e7e115f6-fce4-4648-aae7-20277eba6fb8
+              height: null
+              showLabel: true
+        - start: 60
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: e6cca60f-7d97-47f1-88cd-90cd45ce1f45
+              height: null
+              showLabel: true
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 09e59e37-8a44-45a5-ad8b-3c8f2f3e67ff
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: c5050fb5-d08e-4290-91d7-af2a5213d82f
+              height: null
+              showLabel: true
+    - columns:
+        - start: 6
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: df98768e-b949-4acd-871c-746d65911763
+              height: 340
+              showLabel: false
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 2bf43f1c-b98b-47ae-ac3e-d9e6b187a51f
+              height: null
+              showLabel: true
+    - columns:
+        - start: 9
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 282f9cd2-8d29-4946-9312-b16e9630e8f1
+              height: null
+              showLabel: false
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 605c8c1a-0661-4523-b05a-137d948a6bed
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: ab4894d5-f6dd-4f17-acf5-7c5907b24d86
+              height: null
+              showLabel: false
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: 29d8e019-de60-432d-8991-c56d3afd5f35
+              height: null
+              showLabel: true
+    - columns:
+        - start: 0
+          end: 120
+          elements:
+            - showSource: false
+              hideOutput: false
+              type: CELL
+              cellId: d133f17a-a334-45e4-a5ef-610feab2891d
+              height: null
+              showLabel: true

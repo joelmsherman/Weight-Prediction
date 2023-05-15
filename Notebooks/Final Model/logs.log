@@ -1,0 +1,41 @@
+2023-05-09 14:49:47,853:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2023-05-09 14:49:47,853:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2023-05-09 14:49:47,854:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2023-05-09 14:49:47,854:WARNING:
+'cuml' is a soft dependency and not included in the pycaret installation. Please run: `pip install cuml` to install.
+2023-05-09 14:49:48,359:WARNING:
+'prophet' is a soft dependency and not included in the pycaret installation. Please run: `pip install prophet` to install.
+2023-05-09 14:49:55,288:INFO:Initializing load_model()
+2023-05-09 14:49:55,288:INFO:load_model(model_name=exp5_pipeline.pkl, platform=None, authentication=None, verbose=True)
+2023-05-09 14:50:10,930:INFO:Initializing load_model()
+2023-05-09 14:50:10,930:INFO:load_model(model_name=exp5_pipeline, platform=None, authentication=None, verbose=True)
+2023-05-09 14:53:43,444:INFO:Initializing predict_model()
+2023-05-09 14:53:43,444:INFO:predict_model(self=<pycaret.regression.oop.RegressionExperiment object at 0x0000011E8CF66730>, estimator=Pipeline(memory=FastMemory(location=C:\Users\Sherman\AppData\Local\Temp\joblib),
+         steps=[('numerical_imputer',
+                 TransformerWrapper(include=['Fullness'],
+                                    transformer=SimpleImputer())),
+                ('categorical_imputer',
+                 TransformerWrapper(include=['Station', 'Material', 'Vehicle'],
+                                    transformer=SimpleImputer(strategy='most_frequent'))),
+                ('ordinal_encoding',
+                 TransformerWrap...
+                                                                         'mapping': Metro Central    0
+Metro South      1
+NaN             -1
+dtype: int64}]))),
+                ('onehot_encoding',
+                 TransformerWrapper(include=['Material', 'Vehicle'],
+                                    transformer=OneHotEncoder(cols=['Material',
+                                                                    'Vehicle'],
+                                                              handle_missing='return_nan',
+                                                              use_cat_names=True))),
+                ('normalize', TransformerWrapper(transformer=StandardScaler())),
+                ('trained_model',
+                 ExtraTreesRegressor(n_jobs=-1, random_state=7512))]), probability_threshold=None, encoded_labels=False, raw_score=False, round=4, verbose=True, ml_usecase=None, preprocess=True, replace_labels_in_column=<function _SupervisedExperiment.predict_model.<locals>.replace_labels_in_column at 0x0000011E89F95CA0>)
+2023-05-09 14:53:43,444:INFO:Checking exceptions
+2023-05-09 14:53:43,444:INFO:Preloading libraries
+2023-05-09 14:53:43,444:INFO:Set up data.
+2023-05-09 14:53:43,451:INFO:Set up index.
