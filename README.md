@@ -1,5 +1,7 @@
 # Predicting Weights of Transfer Station Loads without Scales
-A consolidated summary presentation is available [here](https://www.beautiful.ai/player/-NSlRzqM0jPKAHD15y9K)
+![image](Binaries/TitleSlideImage.png)
+
+A consolidated summary presentation is available [here](https://www.beautiful.ai/player/-NXNAsMpTJbK0JcUkRhR)
 
 ## Background
 ABC Waste Inc's revenues depend largely on the ability to apply an accurate weight (in tons) to established specific tonnage fees and and government taxes.  To do this, ABC uses certified vehicle scales (to within +/- .01 tons, or 20lbs) to record weights.  
