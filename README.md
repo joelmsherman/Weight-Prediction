@@ -23,7 +23,7 @@ Over 4 million records were extracted from ABC's point-of-sale system between Ju
 * **Vehicle:**  Information about the arriving vehicle, including it's type or truck number (if known).
 * **Fullness** The fullness of a vehicle arriving at facility f with Material m, relative to it's historical max for s and m over the data duration.
 
-An exploratory analysis of the data is available [here](https://app.hex.tech/2737cf3a-31c1-4361-9f90-8dea0b629cf0/app/fa95f966-0912-42ca-9c83-9e14b785420f/latest).
+An exploratory analysis of the data is available [here](https://app.hex.tech/54be54bd-cccc-4888-804c-cdb2c24bc75d/hex/dd01deda-2a53-4694-933f-63119b539ca5/draft/logic).
 
 ### Machine Learning
 A baseline and 4 alternative regression models were trained and tested.  The goal was to find a most parsimonious, best-fitting model that accurately predicted weights.  Parsimony will be important when the model is deployed into the field, as they will allow staff to make minimal observations and generate predictions very quickly.  
