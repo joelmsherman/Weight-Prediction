@@ -1,5 +1,5 @@
 # Predicting Weights of Transfer Station Loads without Scales
-![image]()
+![image](https://github.com/joelmsherman/Weight-Prediction/blob/b80fc6400cdb6717cb35838323e2e37caa3557cd/Images/ReadmeTitle.png)
 
 A consolidated summary presentation is available [here](https://www.beautiful.ai/player/-NXNAsMpTJbK0JcUkRhR)
 
