@@ -36,16 +36,7 @@ The experiment results showed that the model without date, time and truck number
 * *Vehicle:*  Arriving vehicle type.
 * *Fullness* Fullness of a vehicle, expressed as a percentage between 0 and 1.
 
-Over the two year period April 2021 through March 2023, the MAE of the 277K holdout loads was about .03 tons.  On a total tonnage basis, the model predicted 382,200 tons, in comparison to the 382,000 actual tons in the sample. An analysis of the ML experiments, including pre-processing steps, test harness and experiment results are available [here](https://app.hex.tech/2737cf3a-31c1-4361-9f90-8dea0b629cf0/app/cb57a2de-6842-4ea2-83fd-9fc7a47b6f48/latest).
-
-## Deployment
-Due to the simplicity of the model, every outcome of its feature space was pre-predicted, loaded into an in-memory database, and served using [Power BI]().  
-
-## Testing
-The app was field-tested while scales were still operational.  The tests were to ensure that the application works as expected, and that predictions were performant.  Test results are available [here]().  
-
-## Post-deployment Monitoring
-On an annual basis, the model is monitored for drift and retrained and redeployed if drift is detected.   
+Over the two year period April 2021 through March 2023, the MAE of the 277K holdout loads was about .03 tons.  On a total tonnage basis, the model predicted 382,200 tons, in comparison to the 382,000 actual tons in the sample. An analysis of the ML experiments, including pre-processing steps, test harness and experiment results are available [here](https://app.hex.tech/54be54bd-cccc-4888-804c-cdb2c24bc75d/hex/3f5c7f28-f15d-459a-8999-b1f779103515/draft/logic).
 
  
 
