@@ -1,5 +1,5 @@
 # Predicting Weights of Transfer Station Loads without Scales
-![image](Binaries/TitleSlideImage.png)
+![image]()
 
 A consolidated summary presentation is available [here](https://www.beautiful.ai/player/-NXNAsMpTJbK0JcUkRhR)
 
